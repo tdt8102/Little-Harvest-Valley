@@ -150,13 +150,14 @@ export function buildingArt(shop: boolean, {rect:r,poly:p,ellipse:e}: Ink) {
 
 export function personArt(direction: Direction, frame: number, outfit: number, {rect:r,poly:p,ellipse:e}: Ink) {
   const color=OUTFITS[outfit] ?? OUTFITS[0], side=direction==='left'||direction==='right', offset=direction==='left'?-2:direction==='right'?2:0;
-  const bob=frame%2; const y=5-bob;
+  const bob=frame===4?1:frame%2, stride=frame===1?1:frame===3?-1:0; const y=5-bob;
   e(5,29,24,7,'#29312180');
-  r(10,26,5,5+(frame===1?2:0),'#3f3330');r(18,25,5,6+(frame===3?2:0),'#4b382d');
+  r(10+(side?stride*2:0),26,5,5+(stride===1?2:0),'#3f3330');
+  r(18-(side?stride*2:0),25,5,6+(stride===-1?2:0),'#4b382d');
   r(10,24,13,5,'#465963');r(12,24,8,3,'#64737a');
   p([9,18,23,18,25,22,24,27,9,27,7,23],'#513b30');
   p([10,18,22,18,23,24,21,26,11,26,9,23],color);
-  r(8,22-bob,3,4,'#d5a06d');r(23,21+bob,3,5,'#c38a60');
+  r(8,22-bob+stride,3,4,'#d5a06d');r(23,21+bob-stride,3,5,'#c38a60');
   r(11,22,3,4,'#e2ae5f');
   if(direction==='up') {r(10,y+6,13,10,'#6e4b35');r(12,y+8,9,8,'#97673e');}
   else {

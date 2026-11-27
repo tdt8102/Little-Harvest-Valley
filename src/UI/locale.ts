@@ -50,6 +50,26 @@ const english = {
   interactCottage: 'E  ·  Rest at the cottage', interactMarket: 'E  ·  Open market', interactMira: 'E  ·  Talk to Mira',
   startToEquip: 'Start a farm to equip items.', enterNames: 'Enter a name for your farmer and farm.',
   purchased: 'Purchased', sold: 'Sold', harvested: 'Harvested', crafted: 'Crafted',
+  tutorial: 'How to Play', previous: 'Back', skipTutorial: 'Skip guide', finishTutorial: 'Let’s play',
+  tutorialPage: (current: number, total: number) => `Page ${current} of ${total}`,
+  touchControls: 'Touch controls', directionPad: 'Hold to move', touchUse: 'Use',
+  touchRest: 'Tap Interact to rest', touchShop: 'Tap Interact to open the market', touchMira: 'Tap Interact to talk to Mira',
+  touchBite: 'Bite! Tap Use or the water to reel in.',
+  touchTillHint: 'Select the hoe and tap an empty tile in the field.',
+  touchSeedHint: 'Select turnip seeds and tap the tilled tile.',
+  touchWaterHint: 'Select the watering can and tap the planted tile.',
+  touchSleepHint: 'Walk home and tap Interact to rest.',
+  coOp: 'Co-op', joinRoom: 'Join farm', hostUrl: 'Host link', roomCode: 'Room code',
+  coOpHelp: 'Enter the link and room code from your host. The host computer keeps the shared farm running.',
+  connecting: 'Connecting to the host…', disconnected: 'Connection lost. Rejoin to continue.',
+  invalidRoom: 'Enter a valid host link, room code, and farmer name.',
+  invalidCode: 'The room code is incorrect.', roomFull: 'This farm already has four players.',
+  connectionError: 'Could not reach the host. Check the link and ask if the server is running.',
+  invalidCommand: 'That action is unavailable from here.',
+  onlineCount: (count: number) => `Co-op · ${count}/4 players`,
+  waitingForSleep: (ready: number, total: number) => `Waiting to sleep · ${ready}/${total} ready`,
+  onlineSleepDescription: 'The next day starts when everyone on the farm is ready to sleep.',
+  leaveRoom: 'Leave co-op', reconnect: 'Rejoin room', roomEnded: 'The host has closed the room.',
 };
 
 const vietnamese: typeof english = {
@@ -95,6 +115,26 @@ const vietnamese: typeof english = {
   interactCottage: 'E  ·  Nghỉ ngơi trong nhà', interactMarket: 'E  ·  Mở cửa hàng', interactMira: 'E  ·  Nói chuyện với Mira',
   startToEquip: 'Hãy bắt đầu chơi để gán vật phẩm vào thanh công cụ.', enterNames: 'Hãy nhập tên nhân vật và tên nông trại.',
   purchased: 'Đã mua', sold: 'Đã bán', harvested: 'Đã thu hoạch', crafted: 'Đã chế tạo',
+  tutorial: 'Hướng dẫn', previous: 'Quay lại', skipTutorial: 'Bỏ qua', finishTutorial: 'Vào chơi',
+  tutorialPage: (current, total) => `Trang ${current}/${total}`,
+  touchControls: 'Điều khiển cảm ứng', directionPad: 'Giữ để di chuyển', touchUse: 'Dùng',
+  touchRest: 'Chạm Tương tác để nghỉ', touchShop: 'Chạm Tương tác để mở cửa hàng', touchMira: 'Chạm Tương tác để nói chuyện với Mira',
+  touchBite: 'Cá cắn câu! Chạm Dùng hoặc chạm mặt nước để kéo cần.',
+  touchTillHint: 'Chọn cuốc rồi chạm vào ô trống trong luống.',
+  touchSeedHint: 'Chọn hạt củ cải rồi chạm vào ô đã xới.',
+  touchWaterHint: 'Chọn bình tưới rồi chạm vào ô đã gieo.',
+  touchSleepHint: 'Về trước cửa nhà và chạm Tương tác để nghỉ.',
+  coOp: 'Chơi co-op', joinRoom: 'Vào nông trại', hostUrl: 'Liên kết của host', roomCode: 'Mã phòng',
+  coOpHelp: 'Nhập liên kết và mã phòng do host gửi. Nông trại chung chạy trên máy người host.',
+  connecting: 'Đang kết nối tới host…', disconnected: 'Mất kết nối. Vào lại phòng để chơi tiếp.',
+  invalidRoom: 'Hãy nhập liên kết host, mã phòng và tên nhân vật hợp lệ.',
+  invalidCode: 'Mã phòng không đúng.', roomFull: 'Nông trại đã đủ bốn người chơi.',
+  connectionError: 'Không kết nối được tới host. Hãy kiểm tra lại liên kết và hỏi host xem server còn chạy không.',
+  invalidCommand: 'Bạn chưa thể thực hiện thao tác này ở đây.',
+  onlineCount: count => `Co-op · ${count}/4 người`,
+  waitingForSleep: (ready, total) => `Chờ ngủ · ${ready}/${total} đã sẵn sàng`,
+  onlineSleepDescription: 'Ngày mới bắt đầu khi mọi người đang chơi đều sẵn sàng đi ngủ.',
+  leaveRoom: 'Rời phòng co-op', reconnect: 'Vào lại phòng', roomEnded: 'Host đã đóng phòng.',
 };
 
 const viItems: Record<ItemId, [name: string, note: string]> = {
@@ -163,6 +203,7 @@ const notices: Record<NoticeKey, [en: string, vi: string]> = {
   soilWatered: ['Soil watered.', 'Đã tưới nước.'],
   tillInsideField: ['Till a free square inside the farm plot.', 'Hãy xới một ô trống trong luống.'],
   wrongTool: ['Choose a matching tool and target.', 'Hãy chọn công cụ phù hợp với ô đang nhắm.'],
+  castCancelled: ['Line reeled in.', 'Đã thu dây câu.'],
 };
 
 export function createLocale(language: Language) {

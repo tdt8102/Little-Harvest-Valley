@@ -6,7 +6,7 @@ export type NoticeKey =
   | 'approachLandmark' | 'fullEnergy' | 'restoredEnergy' | 'waitForBite' | 'fishEscaped' | 'fishCaught'
   | 'moveCloser' | 'outOfEnergy' | 'selectTool' | 'castLine' | 'aimAtPond' | 'canRefilled'
   | 'oneMoreHit' | 'fencePickedUp' | 'chooseGrass' | 'fencePlaced' | 'soilTilled' | 'emptyPlot'
-  | 'seedPlanted' | 'alreadyWatered' | 'aimCan' | 'emptyCan' | 'soilWatered' | 'tillInsideField' | 'wrongTool';
+  | 'seedPlanted' | 'alreadyWatered' | 'aimCan' | 'emptyCan' | 'soilWatered' | 'tillInsideField' | 'wrongTool' | 'castCancelled';
 
 export type Notice = NoticeKey
   | { kind: 'purchased' | 'sold' | 'harvested'; item: ItemId }

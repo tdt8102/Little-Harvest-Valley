@@ -1,48 +1,62 @@
 import Phaser from 'phaser';
 import { buildingArt, cropArt, draw, personArt, propArt, tileArt, treeArt } from '../Assets/pixels.ts';
-import { DELTA } from '../Components/position.ts';
+import { DELTA, key } from '../Components/position.ts';
 import type { Direction, Point } from '../Components/position.ts';
 import { TILE, WORLD } from '../Config/game.ts';
 import { ready } from '../Farming/crops.ts';
 import { advance } from '../Systems/clock.ts';
+import type { ItemId } from '../Items/catalog.ts';
+import type { Peer } from '../Network/protocol.ts';
+import type { ActionEffect } from '../Systems/effects.ts';
 import type { Gameplay } from '../Systems/gameplay.ts';
 import { fence, hash, inPlot, NPC_SPOT, path, PLOT, water } from '../World/map.ts';
+import { tileCenter as center, ValleyEffects } from './ValleyEffects.ts';
 
 type Ports = {
   model: () => Gameplay; blocked: () => boolean; reduced: () => boolean;
   use: (target: Point) => void; tick: (delta: number) => void; ready: () => void; reeledIn: () => void;
   inspect: () => boolean;
   landmarks: () => [cottage: string, market: string, pond: string];
+  touch: () => boolean;
+  touchMovement: () => Point;
+  footstep: (dirt: boolean) => void;
+  online: () => boolean;
+  peers: () => Peer[];
+  movement: (x: number, y: number) => void;
 };
-const center = (value: number) => value * TILE + TILE / 2;
 const directions: Direction[] = ['down','up','left','right'];
+type PeerSprite = { sprite: Phaser.GameObjects.Sprite; name: Phaser.GameObjects.Text; point: Point };
 export class ValleyScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private dynamic: Phaser.GameObjects.GameObject[] = [];
   private cursor!: Phaser.GameObjects.Graphics;
   private shade!: Phaser.GameObjects.Rectangle;
   private ripples!: Phaser.GameObjects.Graphics;
-  private effects!: Phaser.GameObjects.Graphics;
+  private ambience!: ValleyEffects;
   private lampGlows: Phaser.GameObjects.Image[] = [];
   private landmarkSigns: Phaser.GameObjects.Text[] = [];
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private facing: Direction = 'down';
-  private action: { x: number; y: number; until: number; color: number } | null = null;
-  private size = {w:0,h:0};
+  private resourceSprites = new Map<string, Phaser.GameObjects.Image>();
+  private peerSprites = new Map<string, PeerSprite>();
+  private stride = 0;
+  private foot = 0;
+  private actionTime = -Infinity;
+  private size = {w:0,h:0,touch:false};
   constructor(private readonly ports: Ports) { super('valley'); }
   create() {
     this.makeTextures();
     this.drawMap();
     this.ripples = this.add.graphics().setDepth(6);
     this.cursor = this.add.graphics().setDepth(900);
-    this.effects = this.add.graphics().setDepth(1300);
     this.player = this.add.sprite(0,0,'person-0-down-0').setOrigin(.5,.86);
-    this.placePlayer(0,0,0);
+    this.placePlayer(false,0);
     this.shade = this.add.rectangle(0,0,1,1,0x252140,0).setDepth(5000);
+    this.ambience = new ValleyEffects(this);
     this.cameras.main.setBackgroundColor('#344b30');
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT',false) as typeof this.keys;
     this.input.on('pointerdown',(pointer: Phaser.Input.Pointer) => {
-      if (pointer.leftButtonDown() && !this.ports.blocked()) this.ports.use(this.pointerTile(pointer));
+      if ((pointer.wasTouch || pointer.leftButtonDown()) && !this.ports.blocked()) this.ports.use(this.pointerTile(pointer));
     });
     window.addEventListener('blur',()=>this.input.keyboard?.resetKeys());
     this.renderChanges();
@@ -53,8 +67,26 @@ export class ValleyScene extends Phaser.Scene {
     const d = DELTA[this.facing];
     return { x: Math.round(p.x) + d.x, y: Math.round(p.y) + d.y };
   }
-  flash(target: Point, color: number) {
-    if (!this.ports.reduced()) this.action = { x:center(target.x),y:center(target.y),until:this.time.now+390,color };
+  playEffect(effect: ActionEffect | 'bite', target?: Point, item?: ItemId) {
+    const position = this.ports.model().farm.position;
+    const at = target ?? position;
+    if (target && effect !== 'bite' && effect !== 'escape') {
+      const dx = at.x - position.x, dy = at.y - position.y;
+      if (Math.hypot(dx,dy) > .15) this.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      this.actionTime = this.time.now;
+    }
+    if (this.ports.reduced()) return;
+    this.ambience.action(this,effect,position,at,this.time.now,item,this.resourceSprites.get(key(at.x,at.y)));
+  }
+  resetEffects() {
+    this.ambience.reset();
+    this.stride=0;
+    this.actionTime=-Infinity;
+    for (const {sprite,name} of this.peerSprites.values()) {sprite.destroy();name.destroy();}
+    this.peerSprites.clear();
+  }
+  playRemoteEffect(effect: ActionEffect, player: Point, target: Point, item?: ItemId) {
+    if (!this.ports.reduced()) this.ambience.action(this,effect,player,target,this.time.now,item,this.resourceSprites.get(key(target.x,target.y)),true);
   }
   private pointerTile(pointer: Phaser.Input.Pointer) {
     const point = this.cameras.main.getWorldPoint(pointer.x,pointer.y);
@@ -83,7 +115,7 @@ export class ValleyScene extends Phaser.Scene {
     for(let i=0;i<4;i++) this.texture(`tree-${i}`,68,78,ink=>treeArt(i,ink));
     for(const kind of ['fence','rock','stump','flowers','reeds','lily','sign','lamp']) for(let i=0;i<3;i++) this.texture(`${kind}-${i}`,32,32,ink=>propArt(kind,i,ink));
     for(const carrot of [0,1]) for(let age=0;age<4;age++) this.texture(`crop-${carrot}-${age}`,32,32,ink=>cropArt(age,!!carrot,ink));
-    for(let outfit=0;outfit<4;outfit++) for(const direction of directions) for(let i=0;i<4;i++) this.texture(`person-${outfit}-${direction}-${i}`,32,36,ink=>personArt(direction,i,outfit,ink));
+    for(let outfit=0;outfit<4;outfit++) for(const direction of directions) for(let i=0;i<5;i++) this.texture(`person-${outfit}-${direction}-${i}`,32,36,ink=>personArt(direction,i,outfit,ink));
     this.texture('cottage',184,151,ink=>buildingArt(false,ink));
     this.texture('market',184,151,ink=>buildingArt(true,ink));
     this.texture('glow',64,64,({ellipse})=>{
@@ -149,6 +181,7 @@ export class ValleyScene extends Phaser.Scene {
   }
   renderChanges() {
     if (!this.player) return;
+    this.resourceSprites.clear();
     this.dynamic.forEach(object=>object.destroy()); this.dynamic=[];
     const { farm }=this.ports.model();
     for(const entry of farm.resources){
@@ -156,7 +189,12 @@ export class ValleyScene extends Phaser.Scene {
         const variant=Math.floor(hash(entry.x+4,entry.y)*4);
         const tree=this.add.image(center(entry.x),center(entry.y)+11,`tree-${variant}`).setScale(1.14+hash(entry.x,entry.y)*.29).setOrigin(.5,.91).setDepth(center(entry.y)+8);
         this.dynamic.push(tree);
-      } else this.dynamic.push(this.prop(entry.x,entry.y,`${entry.kind}-0`));
+        this.resourceSprites.set(entry.id,tree);
+      } else {
+        const prop=this.prop(entry.x,entry.y,`${entry.kind}-0`);
+        this.resourceSprites.set(entry.id,prop);
+        this.dynamic.push(prop);
+      }
     }
     for(const entry of farm.fences){
       const [x,y]=entry.split(',').map(Number); this.dynamic.push(this.prop(x,y,'fence-0'));
@@ -173,38 +211,88 @@ export class ValleyScene extends Phaser.Scene {
       }
     }
   }
-  private placePlayer(dx: number,dy: number,time: number) {
+  private placePlayer(moving: boolean,time: number) {
     const { farm }=this.ports.model();
-    const frame=dx||dy ? (this.ports.reduced()?0:Math.floor(time/115)%4) : 0;
+    const reduced=this.ports.reduced();
+    const actionAge=(time-this.actionTime)/285;
+    const pose=!reduced && actionAge >= 0 && actionAge < 1 ? Math.round(Math.sin(actionAge*Math.PI)*2) : 0;
+    const frame=reduced?0:moving?(1+Math.floor(this.stride/.30))%4:(pose||time%1570>1050?4:0);
     const p=farm.position;
-    this.player.setPosition(center(p.x),center(p.y)+7).setDepth(center(p.y)+7).setTexture(`person-${farm.character.outfit}-${this.facing}-${frame}`);
+    this.player.setPosition(center(p.x),center(p.y)+7-pose).setDepth(center(p.y)+7).setTexture(`person-${farm.character.outfit}-${this.facing}-${frame}`);
+  }
+  private placePeers(delta: number,time: number,reduced: boolean) {
+    const peers=this.ports.peers();
+    const present=new Set<string>();
+    for (const peer of peers) {
+      present.add(peer.id);
+      let actor=this.peerSprites.get(peer.id);
+      if (!actor) {
+        const sprite=this.add.sprite(0,0,'person-0-down-0').setOrigin(.5,.86);
+        const name=this.add.text(0,0,peer.name,{
+          fontFamily:'system-ui, sans-serif',fontSize:'11px',color:'#fff0bf',backgroundColor:'#33291de5',padding:{x:4,y:2},
+        }).setOrigin(.5,1).setDepth(799);
+        actor={sprite,name,point:{...peer.position}};
+        this.peerSprites.set(peer.id,actor);
+      }
+      const distance=Phaser.Math.Distance.Between(actor.point.x,actor.point.y,peer.position.x,peer.position.y);
+      const smooth=reduced||distance>2.4?1:1-Math.exp(-delta/56);
+      actor.point.x=Phaser.Math.Linear(actor.point.x,peer.position.x,smooth);
+      actor.point.y=Phaser.Math.Linear(actor.point.y,peer.position.y,smooth);
+      const x=center(actor.point.x),y=center(actor.point.y);
+      const frame=reduced?0:distance>.07?Math.floor(time/95)%4:time%1840>1430?4:0;
+      actor.sprite.setPosition(x,y+8).setDepth(y+6).setTexture(`person-${peer.outfit}-${peer.direction}-${frame}`);
+      actor.name.setPosition(x,y-26);
+    }
+    for (const [id,{sprite,name}] of this.peerSprites) {
+      if (!present.has(id)) {sprite.destroy();name.destroy();this.peerSprites.delete(id);}
+    }
   }
   update(time: number,rawDelta: number) {
     const delta=Math.min(40,rawDelta);
     const frozen=this.ports.blocked();
+    const touch=this.ports.touch(), reduced=this.ports.reduced();
+    const pad=this.ports.touchMovement();
     const read=(a: string,b: string)=>Number(this.keys[a].isDown||this.keys[b].isDown);
-    const x=frozen?0:read('D','RIGHT')-read('A','LEFT'),y=frozen?0:read('S','DOWN')-read('W','UP');
+    const x=frozen?0:Math.sign(read('D','RIGHT')-read('A','LEFT')+pad.x);
+    const y=frozen?0:Math.sign(read('S','DOWN')-read('W','UP')+pad.y);
+    this.ports.movement(x,y);
     const model=this.ports.model();
+    const p=model.farm.position, startX=p.x, startY=p.y;
     if(x||y){
       this.facing=y>0?'down':y<0?'up':x>0?'right':'left';
       const run=delta*.0044/(x&&y?Math.SQRT2:1);
       if(model.move(x*run,y*run))this.ports.reeledIn();
     }
-    if(!frozen){model.farm.minutes=advance(model.farm.minutes,delta);this.ports.tick(delta);}
-    this.placePlayer(x,y,time);
+    const traveled=Math.hypot(p.x-startX,p.y-startY);
+    if (traveled > 0) {
+      const lastStep=Math.floor(this.stride/.6);
+      this.stride+=traveled;
+      if (Math.floor(this.stride/.6)!==lastStep) {
+        const tx=Math.round(p.x),ty=Math.round(p.y), dirt=path(tx,ty)||inPlot(tx,ty);
+        this.foot=1-this.foot;
+        if(!reduced)this.ambience.step(p,dirt,this.foot?1:-1,time);
+        this.ports.footstep(dirt);
+      }
+    } else this.stride=0;
+    if(!frozen){
+      if(!this.ports.online())model.farm.minutes=advance(model.farm.minutes,delta);
+      this.ports.tick(delta);
+    }
+    this.placePlayer(traveled>0,time);
+    this.placePeers(delta,time,reduced);
     const {width:w,height:h}=this.scale.gameSize;
     const camera=this.cameras.main;
-    if(this.size.w!==w||this.size.h!==h){
-      this.size={w,h};
-      camera.setZoom(Math.max(.73,Math.min(1.32,Math.max(h/695,w/1400))));
+    if(this.size.w!==w||this.size.h!==h||this.size.touch!==touch){
+      this.size={w,h,touch};
+      camera.setZoom(Math.max(touch ? .90 : .73,Math.min(1.32,Math.max(h/695,w/1400))));
     }
-    const p=model.farm.position, z=camera.zoom;
+    const z=camera.zoom;
     const desiredX=w<760?center(p.x):center(p.x)+Math.min(w*.18,220)/z;
     const desiredY=h<550?center(p.y)+30:center(p.y)+79;
     const halfX=w/(2*z),halfY=h/(2*z);
     const targetX=Math.max(Math.min(halfX,640),Math.min(Math.max(1280-halfX,640),desiredX));
     const targetY=Math.max(Math.min(halfY,400),Math.min(Math.max(800-halfY,400),desiredY));
-    const first=time<100 || this.ports.reduced();
+    const first=time<100 || reduced;
     const currentX=camera.scrollX+w/2,currentY=camera.scrollY+h/2;
     camera.centerOn(first?targetX:Phaser.Math.Linear(currentX,targetX,.12),first?targetY:Phaser.Math.Linear(currentY,targetY,.12));
     this.shade.setPosition(camera.scrollX+w/2,camera.scrollY+h/2).setSize(w/z+20,h/z+20);
@@ -212,7 +300,7 @@ export class ValleyScene extends Phaser.Scene {
     this.shade.setAlpha(Phaser.Math.Clamp((minute-1050)/540,0,.50));
     this.ripples.clear();
     for(let i=0;i<13;i++){
-      const a=((this.ports.reduced()?0:time)/(1850+i*55)+i*.151)%1, px=805+hash(i,17)*286,py=502+hash(i,4)*132;
+      const a=((reduced?0:time)/(1850+i*55)+i*.151)%1, px=805+hash(i,17)*286,py=502+hash(i,4)*132;
       if(((px-957)/145)**2+((py-566)/89)**2<1){
         this.ripples.fillStyle(0xa2d2b4,.38*Math.sin(a*Math.PI));
         this.ripples.fillRect(Math.floor(px+a*14),Math.floor(py),9+i%12,1);
@@ -221,23 +309,15 @@ export class ValleyScene extends Phaser.Scene {
     this.cursor.clear();
     if(!frozen){
       const mouse=this.input.activePointer;
-      const over=mouse.x>=0&&mouse.y>=0&&mouse.x<w&&mouse.y<h;
+      const over=!touch&&!mouse.wasTouch&&mouse.x>=0&&mouse.y>=0&&mouse.x<w&&mouse.y<h;
       const target=over?this.pointerTile(mouse):this.front();
       if(Math.hypot(target.x-p.x,target.y-p.y)<2.1){
         this.cursor.lineStyle(2,0xf5dc96,.85);
         this.cursor.strokeRect(target.x*TILE+2,target.y*TILE+2,28,28);
       }
     }
-    this.effects.clear();
     const glow = Phaser.Math.Clamp((minute-1050)/170,0,.75);
-    for(const light of this.lampGlows)light.setAlpha(glow);
-    if(this.action && this.action.until>time){
-      const life=(this.action.until-time)/390;
-      this.effects.fillStyle(this.action.color,life);
-      for(let i=0;i<7;i++){
-        const ang=i*.897;
-        this.effects.fillRect(this.action.x+Math.cos(ang)*(1-life)*22,this.action.y+Math.sin(ang)*(1-life)*16,3,3);
-      }
-    }
+    this.lampGlows.forEach((light,index)=>light.setAlpha(glow*(reduced?1:.91+Math.sin(time/420+index)*.09)));
+    this.ambience.update(time,performance.now(),camera,p,minute,model.cast,reduced);
   }
 }

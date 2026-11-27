@@ -7,8 +7,8 @@ import { ITEMS } from '../Items/catalog.ts';
 
 const SAVE = 'little-harvest-valley:v1';
 const OPTIONS = 'little-harvest-valley:settings';
-export type Options = { volume: number; reducedMotion: boolean; language: Language };
-const DEFAULT_OPTIONS: Options = { volume: 0.5, reducedMotion: false, language: DEFAULT_LANGUAGE };
+export type Options = { volume: number; reducedMotion: boolean; language: Language; tutorialSeen: boolean };
+const DEFAULT_OPTIONS: Options = { volume: 0.5, reducedMotion: false, language: DEFAULT_LANGUAGE, tutorialSeen: false };
 export function storeFarm(farm: Farm) {
   try { localStorage.setItem(SAVE, JSON.stringify(farm)); return true; }
   catch { return false; }
@@ -32,6 +32,7 @@ export function readOptions(): Options {
       volume: typeof value?.volume === 'number' ? Math.max(0, Math.min(1, value.volume)) : DEFAULT_OPTIONS.volume,
       reducedMotion: value?.reducedMotion === true,
       language: isLanguage(value?.language) ? value.language : DEFAULT_OPTIONS.language,
+      tutorialSeen: value?.tutorialSeen === true,
     };
   } catch { return { ...DEFAULT_OPTIONS }; }
 }

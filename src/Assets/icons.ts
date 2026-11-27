@@ -32,11 +32,14 @@ const patterns: Record<string,string[]> = {
   moon: ['.....444.....','....44.......','...44........','...44........','...44....4...','....44..44...','.....4444....'],
 };
 const memo = new Map<string,string>();
+export function paintIcon(canvas: HTMLCanvasElement, name: string) {
+  const palette=['','#906143','#d39b56',name==='can'||name==='water'?'#749ba3':'#9a9a86',name==='water'?'#83b9be':'#f4ca83','#91a66b',name==='carrot'||name==='carrotSeed'?'#df935a':'#d995a0'];
+  draw(canvas,({rect})=>(patterns[name]??patterns.leaf).forEach((row,y)=>[...row].forEach((pixel,x)=>{if(pixel!=='.')rect(x,y+1,1,1,palette[Number(pixel)]); })));
+}
 export function iconUrl(name: string) {
   const existing=memo.get(name); if(existing)return existing;
   const canvas=document.createElement('canvas');canvas.width=13;canvas.height=13;
-  const palette=['','#906143','#d39b56',name==='can'||name==='water'?'#749ba3':'#9a9a86',name==='water'?'#83b9be':'#f4ca83','#91a66b',name==='carrot'||name==='carrotSeed'?'#df935a':'#d995a0'];
-  draw(canvas,({rect})=>(patterns[name]??patterns.leaf).forEach((row,y)=>[...row].forEach((pixel,x)=>{if(pixel!=='.')rect(x,y+1,1,1,palette[Number(pixel)]); })));
+  paintIcon(canvas,name);
   const url=canvas.toDataURL(); memo.set(name,url); return url;
 }
 export const icon = (name: string, cls = '') => `<img class="icon ${cls}" src="${iconUrl(name)}" alt="" draggable="false">`;

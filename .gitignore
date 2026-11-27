@@ -2,6 +2,7 @@ node_modules/
 dist/
 .pnpm-store/
 .vercel/
+.valley-host/
 .env*
 !.env.example
 *.log

@@ -12,9 +12,10 @@ import type { Command } from '../Network/commands.ts';
 import { QUESTS } from '../Quests/quests.ts';
 import { NPC_SPOT, SHOP, inPlot, terrainSolid, water, path } from '../World/map.ts';
 import type { Notice } from './notice.ts';
+import type { ActionEffect } from './effects.ts';
 
-export type Result = { notice?: Notice; changed?: boolean; sound?: 'hit' | 'success' | 'water' | 'coin'; panel?: 'sleep' | 'shop' | 'dialogue'; summary?: Totals };
-type Cast = { until: number; expires: number; origin: Point };
+export type Result = { notice?: Notice; changed?: boolean; effect?: ActionEffect; panel?: 'sleep' | 'shop' | 'dialogue'; summary?: Totals };
+type Cast = { until: number; expires: number; origin: Point; target: Point };
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const near = (a: Point, b: Point, range = 1.55) => distance(a,b) <= range;
 export class Gameplay {
@@ -45,7 +46,7 @@ export class Gameplay {
         farm.position = { ...HOME };
         farm.totals = emptyTotals();
         this.cast = null;
-        return { changed: true, summary, sound: 'success' };
+        return { changed: true, summary, effect: 'sleep' };
       }
       case 'trade': {
         const { item, mode } = command;
@@ -57,7 +58,7 @@ export class Gameplay {
         farm.coins += buying ? -rate : rate;
         farm.totals[buying ? 'spent' : 'earned'] += rate;
         add(farm.bag,item,buying ? 1 : -1);
-        return { changed: true, notice: { kind: buying ? 'purchased' : 'sold', item }, sound: 'coin' };
+        return { changed: true, notice: { kind: buying ? 'purchased' : 'sold', item }, effect: 'trade' };
       }
       case 'craft': {
         const recipe = RECIPES.find(entry => entry.id === command.item);
@@ -66,7 +67,7 @@ export class Gameplay {
         if (!ingredients.every(([id,count]) => has(farm.bag,id,count))) return { notice: 'needMaterials' };
         for (const [id,count] of ingredients) add(farm.bag,id,-count);
         this.gain(recipe.id,recipe.count);
-        return { changed: true, notice: { kind: 'crafted', item: recipe.id, count: recipe.count }, sound: 'success' };
+        return { changed: true, notice: { kind: 'crafted', item: recipe.id, count: recipe.count }, effect: 'craft' };
       }
       case 'claim': {
         const quest = QUESTS.find(entry => entry.id === command.id);
@@ -74,7 +75,7 @@ export class Gameplay {
         farm.claimed.push(quest.id);
         farm.coins += quest.reward;
         farm.totals.earned += quest.reward;
-        return { changed: true, notice: { kind: 'claimed', quest: quest.id, reward: quest.reward }, sound: 'coin' };
+        return { changed: true, notice: { kind: 'claimed', quest: quest.id, reward: quest.reward }, effect: 'quest' };
       }
       case 'use': return this.use(command.item,command.target,command.at);
     }
@@ -96,16 +97,16 @@ export class Gameplay {
       if (farm.energy === MAX_ENERGY) return { notice: 'fullEnergy' };
       farm.energy = Math.min(MAX_ENERGY,farm.energy + 30);
       add(farm.bag,item,-1);
-      return { changed: true, notice: 'restoredEnergy', sound: 'success' };
+      return { changed: true, notice: 'restoredEnergy', effect: 'eat' };
     }
     if (item === 'rod' && this.cast) {
       if (at < this.cast.until) return { notice: 'waitForBite' };
       const caught = at <= this.cast.expires;
       this.cast = null;
-      if (!caught) return { notice: 'fishEscaped' };
+      if (!caught) return { notice: 'fishEscaped', effect: 'escape' };
       this.gain('fish');
       farm.totals.gathered++;
-      return { changed: true, notice: 'fishCaught', sound: 'success' };
+      return { changed: true, notice: 'fishCaught', effect: 'catch' };
     }
     if (!near(farm.position,target,1.94)) return { notice: 'moveCloser' };
     const { x,y } = target;
@@ -123,51 +124,52 @@ export class Gameplay {
       this.gain(crop);
       farm.totals.harvested++;
       farm.plots[tile] = { age: 0, watered: false };
-      return { changed: true, notice: { kind: 'harvested', item: crop }, sound: 'success' };
+      return { changed: true, notice: { kind: 'harvested', item: crop }, effect: 'harvest' };
     }
     if (!item || !has(farm.bag,item)) return { notice: 'selectTool' };
     if (item === 'rod' && water(x,y)) {
       if (!spend(4)) return tired;
-      this.cast = { until: at + 1300, expires: at + 3100, origin: { ...farm.position } };
-      return { changed: true, notice: 'castLine', sound: 'water' };
+      this.cast = { until: at + 1300, expires: at + 3100, origin: { ...farm.position }, target: { ...target } };
+      return { changed: true, notice: 'castLine', effect: 'cast' };
     }
     if (item === 'rod') return { notice: 'aimAtPond' };
     if (item === 'can' && water(x,y)) {
       farm.water = 12;
-      return { changed: true, notice: 'canRefilled', sound: 'water' };
+      return { changed: true, notice: 'canRefilled', effect: 'refill' };
     }
     if (resource && ((item === 'axe' && resource.kind !== 'rock') || (item === 'pick' && resource.kind === 'rock'))) {
       if (!spend(3)) return tired;
       resource.hits--;
-      if (resource.hits > 0) return { changed: true, notice: 'oneMoreHit', sound: 'hit' };
-      const drop = resource.kind === 'rock' ? 'stone' : 'wood';
+      const rock = resource.kind === 'rock';
+      if (resource.hits > 0) return { changed: true, notice: 'oneMoreHit', effect: rock ? 'mine' : 'chop' };
+      const drop = rock ? 'stone' : 'wood';
       farm.resources = farm.resources.filter(entry => entry !== resource);
       this.gain(drop,3);
       farm.totals.gathered += 3;
-      return { changed: true, notice: { kind: 'gathered', item: drop, count: 3 }, sound: 'success' };
+      return { changed: true, notice: { kind: 'gathered', item: drop, count: 3 }, effect: rock ? 'breakRock' : 'fell' };
     }
     if (item === 'axe' && farm.fences.includes(tile)) {
       if (!spend(2)) return tired;
       farm.fences = farm.fences.filter(entry => entry !== tile);
       add(farm.bag,'fence',1);
-      return { changed: true, notice: 'fencePickedUp', sound: 'hit' };
+      return { changed: true, notice: 'fencePickedUp', effect: 'liftFence' };
     }
     if (item === 'fence') {
       if (this.solid(x,y) || plot || path(x,y) || near(farm.position,target,0.75)) return { notice: 'chooseGrass' };
       farm.fences.push(tile);
       add(farm.bag,item,-1);
-      return { changed: true, notice: 'fencePlaced', sound: 'hit' };
+      return { changed: true, notice: 'fencePlaced', effect: 'build' };
     }
     if (item === 'hoe' && inPlot(x,y) && !plot && !this.solid(x,y)) {
       if (!spend(2)) return tired;
       farm.plots[tile] = { age: 0, watered: false };
-      return { changed: true, notice: 'soilTilled', sound: 'hit' };
+      return { changed: true, notice: 'soilTilled', effect: 'till' };
     }
     if (item === 'turnipSeed' || item === 'carrotSeed') {
       if (!plot || plot.seed) return { notice: 'emptyPlot' };
       plot.seed = item;
       add(farm.bag,item,-1);
-      return { changed: true, notice: 'seedPlanted', sound: 'success' };
+      return { changed: true, notice: 'seedPlanted', effect: 'plant' };
     }
     if (item === 'can') {
       if (!plot || plot.watered) return { notice: plot ? 'alreadyWatered' : 'aimCan' };
@@ -175,7 +177,7 @@ export class Gameplay {
       if (!spend(1)) return tired;
       farm.water--;
       plot.watered = true;
-      return { changed: true, notice: 'soilWatered', sound: 'water' };
+      return { changed: true, notice: 'soilWatered', effect: 'water' };
     }
     return { notice: item === 'hoe' ? 'tillInsideField' : 'wrongTool' };
   }

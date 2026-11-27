@@ -17,9 +17,9 @@ test('till, sow, water twice, harvest three turnips, claim quest, sell and buy',
   const tiles=[14,15,16];
   for(const x of tiles){
     moveTo(game,x,14);
-    assert.equal(use(game,'hoe',x,13).changed,true);
-    assert.equal(use(game,'turnipSeed',x,13).changed,true);
-    assert.equal(use(game,'can',x,13).changed,true);
+    assert.equal(use(game,'hoe',x,13).effect,'till');
+    assert.equal(use(game,'turnipSeed',x,13).effect,'plant');
+    assert.equal(use(game,'can',x,13).effect,'water');
   }
   assert.equal(game.farm.bag.turnipSeed,3);
   assert.equal(game.farm.energy,91);
@@ -95,9 +95,10 @@ test('fishing requires a bank, bite timing and an active cast', () => {
   assert.equal(water(25,17),true);
   assert.equal(use(game,'rod',25,17,0).changed,undefined);
   moveTo(game,24,17);
-  assert.equal(use(game,'rod',25,17,100).changed,true);
+  assert.equal(use(game,'rod',25,17,100).effect,'cast');
+  assert.deepEqual(game.cast.target,{x:25,y:17});
   assert.equal(use(game,'rod',25,17,400).changed,undefined);
-  assert.equal(use(game,'rod',25,17,1500).changed,true);
+  assert.equal(use(game,'rod',25,17,1500).effect,'catch');
   assert.equal(game.farm.bag.fish,1);
   use(game,'rod',25,17,1700);
   assert.equal(use(game,'rod',25,17,6000).notice,'fishEscaped');
@@ -125,9 +126,9 @@ test('language options migrate older settings and persist an explicit choice', (
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{
     getItem:key=>backing.get(key)??null,setItem:(key,value)=>backing.set(key,value),
   }});
-  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'vi'});
-  storeOptions({...readOptions(),language:'en'});
-  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'en'});
+  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'vi',tutorialSeen:false});
+  storeOptions({...readOptions(),language:'en',tutorialSeen:true});
+  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'en',tutorialSeen:true});
   backing.set(settingsKey,JSON.stringify({language:'fr'}));
   assert.equal(readOptions().language,'vi');
 });

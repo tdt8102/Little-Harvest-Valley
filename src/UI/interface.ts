@@ -1,4 +1,4 @@
-import { icon } from '../Assets/icons.ts';
+import { icon, iconUrl } from '../Assets/icons.ts';
 import { draw, personArt } from '../Assets/pixels.ts';
 import { OUTFITS } from '../Entities/types.ts';
 import { PRICES, SALES } from '../Economy/market.ts';
@@ -11,8 +11,10 @@ import { QUESTS } from '../Quests/quests.ts';
 import type { Locale } from './locale.ts';
 import type { Farm, Totals } from '../Core/state.ts';
 import type { Options } from '../Save/storage.ts';
+import { tutorialPages } from './tutorial.ts';
 
-export type Panel = 'create'|'replace'|'inventory'|'craft'|'quests'|'calendar'|'pause'|'settings'|'shop'|'dialogue'|'sleep'|'summary';
+export type Panel = 'create'|'replace'|'inventory'|'craft'|'quests'|'calendar'|'pause'|'settings'|'shop'|'dialogue'|'sleep'|'summary'|'tutorial'|'online';
+export type JoinDraft = { address: string; code: string; name: string };
 const slotKeys = ['1','2','3','4','5','6','7','8','9','0','[',']'];
 const portraits = new Map<number,string>();
 export function portrait(outfit: number) {
@@ -40,6 +42,7 @@ export class Interface {
   private readonly mount: HTMLElement;
   private toastTimer = 0;
   private hudSnapshot = '';
+  private touch = false;
   private previouslyFocused: HTMLElement | null = null;
   constructor(root: HTMLElement, private locale: Locale) {
     this.mount=root;
@@ -70,7 +73,18 @@ export class Interface {
             </div>
           </section>
         </aside>
+        <div class="network-badge wood" id="network-badge" role="status" hidden></div>
         <div class="context" id="context" hidden></div><div class="toast" id="toast" role="status" hidden></div>
+        <section class="touch-controls" id="touch-controls" data-label="touchControls" hidden>
+          <div class="dpad" id="dpad" role="group" data-label="directionPad">
+            <span class="dpad-key dpad-up"><i></i></span><span class="dpad-key dpad-left"><i></i></span>
+            <span class="dpad-center"></span><span class="dpad-key dpad-right"><i></i></span><span class="dpad-key dpad-down"><i></i></span>
+          </div>
+          <div class="touch-actions">
+            <button type="button" id="touch-interact" class="button" data-action="touch-interact">${icon('bell')}<span data-copy="interact"></span></button>
+            <button type="button" class="button primary" data-action="touch-use">${icon('hoe')}<span data-copy="touchUse"></span></button>
+          </div>
+        </section>
         <section class="belt" data-label="toolBelt"><div class="belt-label"><span></span><b data-copy="toolBelt"></b><span></span></div><div id="bar" class="hotbar wood"></div><div class="equipped" id="equipped"></div></section>
       </main>
       <footer class="footer"><span>${icon('leaf')}<b>LITTLE HARVEST VALLEY</b></span><div class="controls"><span><kbd>W A S D</kbd> <small data-copy="move"></small></span><span><kbd>E</kbd> <small data-copy="interact"></small></span><span><kbd data-copy="click"></kbd> / <kbd data-copy="space"></kbd> <small data-copy="useTool"></small></span><span><kbd>Esc</kbd> <small data-copy="menu"></small></span></div><span class="footer-right"><i></i> <small data-copy="localSave"></small></span></footer>
@@ -93,12 +107,23 @@ export class Interface {
     this.byId('toast').hidden=true;
   }
   private byId(id: string) { return this.mount.querySelector<HTMLElement>('#'+id)!; }
+  setTouch(touch: boolean, started: boolean) {
+    this.touch=touch;
+    this.mount.querySelector('.shell')!.classList.toggle('touch-layout',touch);
+    this.byId('touch-controls').hidden=!touch || !started;
+  }
+  touchNearby(active: boolean) { this.byId('touch-interact').classList.toggle('nearby',active); }
+  onlineStatus(message: string) {
+    const badge=this.byId('network-badge');
+    badge.hidden=!message;
+    if(badge.textContent!==message)badge.textContent=message;
+  }
   ready() { this.byId('loading').hidden=true; }
   main(visible: boolean, hasSave: boolean) {
     const el=this.byId('welcome');el.hidden=!visible;
     if(!visible)return;
     const t=this.locale.text;
-    el.innerHTML=`<div class="welcome-kicker">${icon('leaf')} ${t.farmAwaits}</div><h1>Little Harvest<br><em>Valley</em></h1><p>${t.welcome}</p><div class="welcome-actions">${hasSave?button(t.continueGame,'continue','primary'):''}${button(t.newGame,'new',hasSave?'':'primary')}${button(t.settings,'panel:settings','quiet')}</div>`;
+    el.innerHTML=`<div class="welcome-kicker">${icon('leaf')} ${t.farmAwaits}</div><h1>Little Harvest<br><em>Valley</em></h1><p>${t.welcome}</p><div class="welcome-actions">${hasSave?button(t.continueGame,'continue','primary'):''}${button(t.newGame,'new',hasSave?'':'primary')}${button(t.coOp,'panel:online')}${button(t.tutorial,'panel:tutorial','quiet')}${button(t.settings,'panel:settings','quiet')}</div>`;
   }
   hud(farm: Farm) {
     const t=this.locale.text;
@@ -116,11 +141,11 @@ export class Interface {
     const progress=quest ? farm.progress[quest.item]??0 : 0;
     const plots=Object.values(farm.plots);
     const hint=quest?.id!=='first' ? '' : progress>=quest.target ? t.rewardReady
-      : !plots.length ? t.tillHint
-      : !plots.some(plot=>plot.seed) ? t.seedHint
+      : !plots.length ? (this.touch?t.touchTillHint:t.tillHint)
+      : !plots.some(plot=>plot.seed) ? (this.touch?t.touchSeedHint:t.seedHint)
       : plots.some(ready) ? t.harvestHint
-      : plots.some(plot=>plot.seed && !plot.watered) ? t.waterHint
-      : t.sleepHint;
+      : plots.some(plot=>plot.seed && !plot.watered) ? (this.touch?t.touchWaterHint:t.waterHint)
+      : (this.touch?t.touchSleepHint:t.sleepHint);
     const node=this.byId('journal');
     const unclaimed=quest?`<h3>${this.locale.quest(quest).title}</h3><p>${this.locale.quest(quest).detail}</p><div class="quest-meter"><span><i style="width:${Math.min(100,progress/quest.target*100)}%"></i></span><b>${Math.min(quest.target,progress)} / ${quest.target}</b></div>${hint?`<p class="journal-hint">${hint}</p>`:''}`:`<h3>${t.allCaughtUp}</h3><p>${t.allQuestsDone}</p>`;
     node.innerHTML=unclaimed+button(t.openJournal,'panel:quests','journal-button');
@@ -139,10 +164,13 @@ export class Interface {
     node.hidden=!message;
     if(message && node.textContent!==message)node.textContent=message;
   }
-  toast(message: string) {
+  toast(message: string, image?: string) {
     if(!message)return;
     const node=this.byId('toast');
-    node.replaceChildren(Object.assign(document.createElement('span'),{textContent:message}));
+    const copy=document.createElement('span');
+    if(image)copy.append(Object.assign(document.createElement('img'),{src:iconUrl(image),alt:'',className:'icon'}));
+    copy.append(message);
+    node.replaceChildren(copy);
     node.hidden=false;
     window.clearTimeout(this.toastTimer);
     this.toastTimer=window.setTimeout(()=>{node.hidden=true;},3000);
@@ -162,8 +190,8 @@ export class Interface {
       return;
     }
     const t=this.locale.text;
-    const heading={create:t.createFarmer,replace:t.replaceFarm,inventory:t.inventory,craft:t.crafting,quests:t.questJournal,calendar:t.valleyCalendar,pause:t.gameMenu,settings:t.settings,shop:t.market,dialogue:MIRA.name,sleep:t.cottage,summary:t.dayComplete}[panel];
-    const graphic={create:'leaf',replace:'leaf',inventory:'bag',craft:'hammer',quests:'book',calendar:'calendar',pause:'gear',settings:'gear',shop:'shop',dialogue:'bell',sleep:'moon',summary:'sun'}[panel];
+    const heading={create:t.createFarmer,replace:t.replaceFarm,inventory:t.inventory,craft:t.crafting,quests:t.questJournal,calendar:t.valleyCalendar,pause:t.gameMenu,settings:t.settings,shop:t.market,dialogue:MIRA.name,sleep:t.cottage,summary:t.dayComplete,tutorial:t.tutorial,online:t.coOp}[panel];
+    const graphic={create:'leaf',replace:'leaf',inventory:'bag',craft:'hammer',quests:'book',calendar:'calendar',pause:'gear',settings:'gear',shop:'shop',dialogue:'bell',sleep:'moon',summary:'sun',tutorial:'book',online:'home'}[panel];
     const existing=overlay.querySelector<HTMLElement>('.modal');
     const samePanel=existing?.dataset.panel===panel;
     if(overlay.hidden)this.previouslyFocused=document.activeElement as HTMLElement|null;
@@ -175,7 +203,8 @@ export class Interface {
       existing.querySelector('.modal-body')!.innerHTML=body;
       if(active){
         const candidates=existing.querySelectorAll<HTMLElement>('[data-action]');
-        [...candidates].find(node=>node.dataset.action===active)?.focus();
+        const control=[...candidates].find(node=>node.dataset.action===active);
+        (control ?? (panel==='tutorial'?existing.querySelector<HTMLElement>('.guide-actions .primary'):null))?.focus();
       }
       return;
     }
@@ -187,6 +216,8 @@ export class Interface {
 }
 export function panelBody(panel: Panel, farm: Farm, options: Options, locale: Locale, state: {
   selected: number; outfit: number; line: number; trade: string; summary: Totals|null; started: boolean;
+  tutorialPage: number; touch: boolean; online: boolean; join: JoinDraft; joining: boolean; connectionNote: string;
+  vote: { ready: number; total: number; mine: boolean } | null;
 }) {
   const t=locale.text;
   switch(panel) {
@@ -213,14 +244,29 @@ export function panelBody(panel: Panel, farm: Farm, options: Options, locale: Lo
       const current=locale.day(farm.day);
       return `<div class="calendar-label"><h3>${current.season}</h3><span>${t.year(current.year)}</span></div><div class="calendar-grid">${t.weekdays.map(day=>`<small>${day}</small>`).join('')}${Array.from({length:28},(_,i)=>`<div ${i+1===current.number?'class="today" aria-current="date"':''}>${i+1}</div>`).join('')}</div>`;
     }
-    case 'pause': return `<div class="menu-list">${button(state.started?t.resume:t.returnToMenu,'close','primary')}${state.started?button(t.saveGame,'save'):''}${button(t.settings,'panel:settings')}${state.started?button(t.saveAndReturn,'title'):''}</div>`;
+    case 'pause': return `<div class="menu-list">${button(state.started?t.resume:t.returnToMenu,'close','primary')}${state.started&&!state.online?button(t.saveGame,'save'):''}${button(t.tutorial,'panel:tutorial')}${button(t.settings,'panel:settings')}${state.started?button(state.online?t.leaveRoom:t.saveAndReturn,'title'):''}</div>`;
     case 'settings': return `<div class="settings"><label for="language">${t.language}</label><select id="language"><option value="vi" lang="vi" ${options.language==='vi'?'selected':''}>Tiếng Việt</option><option value="en" lang="en" ${options.language==='en'?'selected':''}>English</option></select><label>${t.soundVolume} <output id="volume-label">${Math.round(options.volume*100)}%</output><input aria-label="${t.soundVolume}" type="range" id="volume" min="0" max="100" value="${Math.round(options.volume*100)}"></label><label class="toggle"><input type="checkbox" id="motion" ${options.reducedMotion?'checked':''}> ${t.reduceMotion}</label></div><div class="actions">${button(t.done,'close','primary')}</div>`;
     case 'shop': {
       const buying=state.trade==='buy', items=Object.entries(buying?PRICES:SALES) as [ItemId,number][];
       return `<div class="shop-tabs">${button(t.buy,'trade-tab:buy',buying?'primary':'')}${button(t.sell,'trade-tab:sell',buying?'':'primary')}${gold(farm.coins,locale)}</div><div class="item-list">${items.map(([id,rate])=>`<article class="item-row">${itemMark(id)}<div><h3>${locale.item(id).name}</h3><p>${t.price(rate,farm.bag[id]??0)}</p></div>${button(buying?t.buyOne:t.sellOne,`trade:${id}`,'primary',buying?farm.coins<rate:!has(farm.bag,id))}</article>`).join('')}</div>`;
     }
     case 'dialogue': return `<div class="dialogue"><img src="${portrait(3)}" alt="Mira"><div><h3>${MIRA.name}</h3><p>${locale.lines[state.line]}</p></div></div><div class="actions">${button(t.marketButton,'panel:shop')}${button(t.next,'next-line','primary')}</div>`;
-    case 'sleep': return `<p>${t.sleepDescription}</p><div class="actions">${button(t.keepFarming,'close')}${button(t.sleepUntilMorning,'sleep','primary')}</div>`;
+    case 'sleep': return `<p>${state.online?t.onlineSleepDescription:t.sleepDescription}</p>${state.vote?.ready?`<p class="join-note">${t.waitingForSleep(state.vote.ready,state.vote.total)}</p>`:''}<div class="actions">${button(t.keepFarming,'close')}${button(t.sleepUntilMorning,'sleep','primary',state.vote?.mine)}</div>`;
+    case 'tutorial': {
+      const pages=tutorialPages(locale.language,state.touch);
+      const page=pages[state.tutorialPage];
+      const last=state.tutorialPage===pages.length-1;
+      return `<div class="guide"><div class="guide-heading"><h3>${page.title}</h3><span>${t.tutorialPage(state.tutorialPage+1,pages.length)}</span></div>
+        <div class="guide-steps">${page.steps.map(([label,instruction,image])=>`<div class="guide-step">${image?`<span class="item-mark">${icon(image)}</span>`:''}<div><h4>${label}</h4><p>${instruction}</p></div></div>`).join('')}</div>
+        <div class="guide-actions">${button(t.skipTutorial,'close','quiet')}${state.tutorialPage?button(t.previous,'tutorial-prev'):''}${button(last?t.finishTutorial:t.next,last?'close':'tutorial-next','primary')}</div></div>`;
+    }
+    case 'online': return `<p>${t.coOpHelp}</p><form id="join-form" class="join-form">
+      <label for="join-address">${t.hostUrl}</label><input id="join-address" name="address" type="url" value="${escape(state.join.address)}" maxlength="240" autocomplete="url" required>
+      <label for="join-code">${t.roomCode}</label><input id="join-code" name="code" value="${escape(state.join.code)}" maxlength="14" autocapitalize="characters" spellcheck="false" required>
+      <label for="join-name">${t.farmerName}</label><input id="join-name" name="name" value="${escape(state.join.name)}" maxlength="18" required>
+      <p class="join-note" role="status">${state.connectionNote}</p>
+      <button type="submit" class="button primary" ${state.joining?'disabled':''}>${state.joining?t.connecting:state.online?t.reconnect:t.joinRoom}</button>
+      </form>`;
     case 'summary': {
       const totals=state.summary!;
       return `<p>${t.farmTitle(escape(farm.character.farm))} · ${locale.day(farm.day-1).label}</p><dl class="summary"><div><dt>${t.goldEarned}</dt><dd>${totals.earned} G</dd></div><div><dt>${t.goldSpent}</dt><dd>${totals.spent} G</dd></div><div><dt>${t.cropsHarvested}</dt><dd>${totals.harvested}</dd></div><div><dt>${t.resourcesGathered}</dt><dd>${totals.gathered}</dd></div></dl><div class="actions">${button(t.startNextDay,'close','primary')}</div>`;

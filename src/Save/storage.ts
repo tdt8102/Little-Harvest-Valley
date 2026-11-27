@@ -7,8 +7,16 @@ import { ITEMS } from '../Items/catalog.ts';
 
 const SAVE = 'little-harvest-valley:v1';
 const OPTIONS = 'little-harvest-valley:settings';
-export type Options = { volume: number; reducedMotion: boolean; language: Language; tutorialSeen: boolean };
-const DEFAULT_OPTIONS: Options = { volume: 0.5, reducedMotion: false, language: DEFAULT_LANGUAGE, tutorialSeen: false };
+export type Options = {
+  volume: number; soundEnabled: boolean; musicVolume: number; musicEnabled: boolean;
+  reducedMotion: boolean; language: Language; tutorialSeen: boolean;
+};
+const DEFAULT_OPTIONS: Options = {
+  volume: .5, soundEnabled: true, musicVolume: .35, musicEnabled: true,
+  reducedMotion: false, language: DEFAULT_LANGUAGE, tutorialSeen: false,
+};
+const readVolume = (value: unknown, fallback: number) => typeof value==='number' && Number.isFinite(value)
+  ? Math.max(0, Math.min(1, value)) : fallback;
 export function storeFarm(farm: Farm) {
   try { localStorage.setItem(SAVE, JSON.stringify(farm)); return true; }
   catch { return false; }
@@ -29,7 +37,10 @@ export function readOptions(): Options {
   try {
     const value = JSON.parse(localStorage.getItem(OPTIONS) ?? '{}') as Partial<Options> | null;
     return {
-      volume: typeof value?.volume === 'number' ? Math.max(0, Math.min(1, value.volume)) : DEFAULT_OPTIONS.volume,
+      volume: readVolume(value?.volume,DEFAULT_OPTIONS.volume),
+      soundEnabled: value?.soundEnabled !== false,
+      musicVolume: readVolume(value?.musicVolume,DEFAULT_OPTIONS.musicVolume),
+      musicEnabled: value?.musicEnabled !== false,
       reducedMotion: value?.reducedMotion === true,
       language: isLanguage(value?.language) ? value.language : DEFAULT_OPTIONS.language,
       tutorialSeen: value?.tutorialSeen === true,

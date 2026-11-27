@@ -15,6 +15,8 @@ Mở địa chỉ được Vite in ra, mặc định là http://127.0.0.1:5173. 
 
 Game mặc định dùng tiếng Việt. Bạn có thể đổi sang **English** trong **Cài đặt → Ngôn ngữ** ở menu chính hoặc menu tạm dừng. Trình duyệt lưu lựa chọn ngôn ngữ riêng với tiến trình nông trại.
 
+Trong **Cài đặt**, bạn có thể bật hoặc tắt và chỉnh âm lượng riêng cho **Nhạc nền** và **Hiệu ứng âm thanh**. Nhạc bắt đầu sau thao tác đầu tiên, tự chuyển giữa *Nắng trên luống* và *Hồ Liễu về đêm*. Tùy chọn **Giảm chuyển động** cũng áp dụng cho bóng mây và cá trong hồ.
+
 Lần đầu vào nông trại, game mở hướng dẫn theo thiết bị. Bạn có thể mở lại mục **Hướng dẫn** bất cứ lúc nào. Trên điện thoại, giữ cụm phím trái để di chuyển, chạm một ô trên thanh công cụ để chọn vật phẩm rồi chạm **Dùng** hoặc chạm trực tiếp ô cần thao tác. Nút **Tương tác** dùng khi đứng trước cửa nhà, cửa hàng hoặc Mira.
 
 ```sh

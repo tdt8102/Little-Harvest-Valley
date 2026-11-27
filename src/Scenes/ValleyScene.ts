@@ -9,8 +9,9 @@ import type { ItemId } from '../Items/catalog.ts';
 import type { Peer } from '../Network/protocol.ts';
 import type { ActionEffect } from '../Systems/effects.ts';
 import type { Gameplay } from '../Systems/gameplay.ts';
-import { fence, hash, inPlot, NPC_SPOT, path, PLOT, water } from '../World/map.ts';
+import { fence, hash, inPlot, NPC_SPOT, path, PLOT, POND, water } from '../World/map.ts';
 import { tileCenter as center, ValleyEffects } from './ValleyEffects.ts';
+import { ValleyNature } from './ValleyNature.ts';
 
 type Ports = {
   model: () => Gameplay; blocked: () => boolean; reduced: () => boolean;
@@ -33,6 +34,7 @@ export class ValleyScene extends Phaser.Scene {
   private shade!: Phaser.GameObjects.Rectangle;
   private ripples!: Phaser.GameObjects.Graphics;
   private ambience!: ValleyEffects;
+  private nature!: ValleyNature;
   private lampGlows: Phaser.GameObjects.Image[] = [];
   private landmarkSigns: Phaser.GameObjects.Text[] = [];
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -53,6 +55,7 @@ export class ValleyScene extends Phaser.Scene {
     this.placePlayer(false,0);
     this.shade = this.add.rectangle(0,0,1,1,0x252140,0).setDepth(5000);
     this.ambience = new ValleyEffects(this);
+    this.nature = new ValleyNature(this);
     this.cameras.main.setBackgroundColor('#344b30');
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT',false) as typeof this.keys;
     this.input.on('pointerdown',(pointer: Phaser.Input.Pointer) => {
@@ -150,7 +153,7 @@ export class ValleyScene extends Phaser.Scene {
       if(fence(x,y))this.prop(x,y,'fence-0');
       if(terrain==='grass' && !water(x,y) && !fence(x,y) && hash(x+71,y*3)>.86)this.prop(x,y,`flowers-${variant%3}`).setDepth(4);
     }
-    this.add.image(center(29.4),center(17.2),'pond').setDepth(2);
+    this.add.image(center(POND.x),center(POND.y),'pond').setDepth(2);
     const border = this.add.graphics().setDepth(1);
     border.fillStyle(0x60442e,.72);
     border.fillRect(PLOT.x*TILE-3,PLOT.y*TILE-3,PLOT.w*TILE+6,3);
@@ -170,7 +173,7 @@ export class ValleyScene extends Phaser.Scene {
     this.add.image(center(26),center(8)+20,'market').setOrigin(.5,.94).setScale(1.09).setDepth(center(8)+18);
     this.add.image(center(NPC_SPOT.x),center(NPC_SPOT.y)+7,'person-3-down-0').setOrigin(.5,.86).setDepth(center(NPC_SPOT.y)+8);
     const signStyle={fontFamily:'Consolas, monospace',fontSize:'10px',fontStyle:'bold',color:'#fff0c4',backgroundColor:'#30281dd9',padding:{x:7,y:5}};
-    const positions=[[center(12),center(5)-24],[center(26),center(5)-24],[center(29.4),center(17.2)+14]];
+    const positions=[[center(12),center(5)-24],[center(26),center(5)-24],[center(POND.x),center(POND.y)+14]];
     this.landmarkSigns=positions.map(([x,y])=>this.add.text(x,y,'',signStyle).setOrigin(.5).setDepth(700).setResolution(2));
     this.landmarkSigns[2].setAlpha(.86);
     this.updateLandmarkLabels();
@@ -282,22 +285,25 @@ export class ValleyScene extends Phaser.Scene {
     this.placePeers(delta,time,reduced);
     const {width:w,height:h}=this.scale.gameSize;
     const camera=this.cameras.main;
-    if(this.size.w!==w||this.size.h!==h||this.size.touch!==touch){
+    const resized=this.size.w!==w||this.size.h!==h||this.size.touch!==touch;
+    if(resized){
       this.size={w,h,touch};
+      if(camera.width!==w||camera.height!==h)camera.setSize(w,h);
       camera.setZoom(Math.max(touch ? .90 : .73,Math.min(1.32,Math.max(h/695,w/1400))));
     }
     const z=camera.zoom;
-    const desiredX=w<760?center(p.x):center(p.x)+Math.min(w*.18,220)/z;
+    const desiredX=touch||w<760?center(p.x):center(p.x)+Math.min(w*.18,220)/z;
     const desiredY=h<550?center(p.y)+30:center(p.y)+79;
     const halfX=w/(2*z),halfY=h/(2*z);
     const targetX=Math.max(Math.min(halfX,640),Math.min(Math.max(1280-halfX,640),desiredX));
     const targetY=Math.max(Math.min(halfY,400),Math.min(Math.max(800-halfY,400),desiredY));
-    const first=time<100 || reduced;
+    const snap=resized || time<100 || reduced;
     const currentX=camera.scrollX+w/2,currentY=camera.scrollY+h/2;
-    camera.centerOn(first?targetX:Phaser.Math.Linear(currentX,targetX,.12),first?targetY:Phaser.Math.Linear(currentY,targetY,.12));
+    camera.centerOn(snap?targetX:Phaser.Math.Linear(currentX,targetX,.12),snap?targetY:Phaser.Math.Linear(currentY,targetY,.12));
     this.shade.setPosition(camera.scrollX+w/2,camera.scrollY+h/2).setSize(w/z+20,h/z+20);
     const minute=model.farm.minutes;
     this.shade.setAlpha(Phaser.Math.Clamp((minute-1050)/540,0,.50));
+    this.nature.update(time,minute,reduced);
     this.ripples.clear();
     for(let i=0;i<13;i++){
       const a=((reduced?0:time)/(1850+i*55)+i*.151)%1, px=805+hash(i,17)*286,py=502+hash(i,4)*132;

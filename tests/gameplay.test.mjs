@@ -6,6 +6,7 @@ import { Gameplay } from '../src/Systems/gameplay.ts';
 import { water, SHOP, NPC_SPOT } from '../src/World/map.ts';
 import { readFarm, readOptions, storeFarm, storeOptions } from '../src/Save/storage.ts';
 import { createLocale } from '../src/UI/locale.ts';
+import { musicTheme } from '../src/Audio/score.ts';
 
 const fresh = () => new Gameplay(newFarm(DEFAULT_CHARACTER));
 const use = (game, item, x, y, at = 0) => game.dispatch({ type:'use', item, target:{x,y}, at });
@@ -120,17 +121,32 @@ test('local storage round-trips progress and rejects corrupt data', () => {
   assert.equal(readFarm(),null);
 });
 
-test('language options migrate older settings and persist an explicit choice', () => {
+test('older settings migrate and music and effects toggles persist independently', () => {
   const settingsKey = 'little-harvest-valley:settings';
   const backing = new Map([[settingsKey,JSON.stringify({volume:0.3,reducedMotion:true})]]);
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{
     getItem:key=>backing.get(key)??null,setItem:(key,value)=>backing.set(key,value),
   }});
-  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'vi',tutorialSeen:false});
-  storeOptions({...readOptions(),language:'en',tutorialSeen:true});
-  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'en',tutorialSeen:true});
+  assert.deepEqual(readOptions(),{volume:0.3,soundEnabled:true,musicVolume:.35,musicEnabled:true,reducedMotion:true,language:'vi',tutorialSeen:false});
+  storeOptions({...readOptions(),language:'en',tutorialSeen:true,soundEnabled:false,musicVolume:.7});
+  assert.deepEqual(readOptions(),{volume:0.3,soundEnabled:false,musicVolume:.7,musicEnabled:true,reducedMotion:true,language:'en',tutorialSeen:true});
+  storeOptions({...readOptions(),soundEnabled:true,musicEnabled:false});
+  assert.equal(readOptions().musicEnabled,false);
+  assert.equal(readOptions().soundEnabled,true);
+  assert.equal(readOptions().musicVolume,.7);
   backing.set(settingsKey,JSON.stringify({language:'fr'}));
   assert.equal(readOptions().language,'vi');
+});
+
+test('the soundtrack changes at dusk and returns after sleeping', () => {
+  assert.equal(musicTheme(360),'day');
+  assert.equal(musicTheme(1079),'day');
+  assert.equal(musicTheme(1080),'night');
+  assert.equal(musicTheme(1320),'night');
+  const game=fresh();
+  game.farm.minutes=1320;
+  sleep(game);
+  assert.equal(musicTheme(game.farm.minutes),'day');
 });
 
 test('the same gameplay result can be shown in Vietnamese or English', () => {

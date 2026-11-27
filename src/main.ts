@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { play, setVolume } from './Audio/sound.ts';
+import { BackgroundMusic } from './Audio/music.ts';
+import { musicTheme } from './Audio/score.ts';
+import type { MusicTheme } from './Audio/score.ts';
 import type { Point } from './Components/position.ts';
 import { isLanguage } from './Config/language.ts';
 import { DEFAULT_CHARACTER, newFarm } from './Core/state.ts';
@@ -24,7 +27,8 @@ const app=document.querySelector<HTMLElement>('#app')!;
 const options=readOptions();
 let locale=createLocale(options.language);
 const ui=new Interface(app,locale);
-const touchMedia=matchMedia('(pointer: coarse), (max-width: 690px)');
+const orientation=matchMedia('(orientation: landscape)');
+const touchMedia=matchMedia('(any-pointer: coarse), (max-width: 690px), (orientation: landscape) and (max-height: 500px) and (max-width: 1100px)');
 const pad=new TouchControls(app.querySelector('#dpad')!);
 let save=readFarm(), model=new Gameplay(newFarm(DEFAULT_CHARACTER));
 let panel: Panel|null=null, started=false, loaded=false;
@@ -38,33 +42,75 @@ let connectionNote: RoomError|'connecting'|'invalidRoom'|'disconnected'|null=nul
 let pendingSummary: Totals|null=null;
 let joinDraft: JoinDraft={address:location.origin,code:'',name:save?.character.name??DEFAULT_CHARACTER.name};
 const network=new RoomClient(receive, onDisconnect);
+let playingTheme: MusicTheme|null=null;
+const music=new BackgroundMusic(theme=>{
+  playingTheme=theme;
+  updateTrackLabel();
+});
 
 document.documentElement.classList.toggle('reduce-motion',options.reducedMotion);
 ui.setTouch(touchMedia.matches,false);
-setVolume(options.volume);
+applyAudioOptions();
 
 const scene=new ValleyScene({
   model:()=>model, blocked:()=>!started||!!panel||(online&&!connected),
   reduced:()=>options.reducedMotion, use:useTool, tick,
   inspect:()=>!started, touch:()=>touchMedia.matches, touchMovement:()=>pad.movement,
-  ready:()=>{loaded=true;ui.ready();ui.main(true,!!save);},
+  ready:()=>{loaded=true;ui.ready();ui.main(true,!!save);observeWorldSize();},
   reeledIn:()=>{if(!online){play('reel');ui.toast(locale.text.reeledIn);}},
   footstep:dirt=>play(dirt?'stepDirt':'stepGrass'),
   landmarks:()=>[locale.text.cottage,locale.text.market,locale.text.pond],
   online:()=>online, peers:()=>peers, movement:(x,y)=>{if(connected)network.move(x,y);},
 });
-new Phaser.Game({
+const game=new Phaser.Game({
   type: Phaser.AUTO, parent:'world', scene:[scene],
   backgroundColor:'#344b30', pixelArt:true, roundPixels:true,
   render:{ antialias:false }, scale:{ mode:Phaser.Scale.RESIZE, width:'100%', height:'100%' },
   audio:{ noAudio:true }, banner:false,
 });
 
+function observeWorldSize() {
+  const world=app.querySelector<HTMLElement>('#world');
+  if(!world || typeof ResizeObserver==='undefined')return;
+  let pending=0;
+  const resize=()=>{
+    if(pending)return;
+    pending=requestAnimationFrame(()=>{
+      pending=0;
+      if(!world.clientWidth || !world.clientHeight)return;
+      const {scale}=game;
+      if(scale.getParentBounds()
+        || Math.abs(world.clientWidth-scale.gameSize.width)>=1
+        || Math.abs(world.clientHeight-scale.gameSize.height)>=1)scale.refresh();
+    });
+  };
+  const observer=new ResizeObserver(resize);
+  observer.observe(world);
+  const viewport=window.visualViewport;
+  viewport?.addEventListener('resize',resize);
+  game.events.once(Phaser.Core.Events.DESTROY,()=>{
+    observer.disconnect();
+    viewport?.removeEventListener('resize',resize);
+    cancelAnimationFrame(pending);
+  });
+}
+
 function refreshNetworkStatus() {
   const t=locale.text;
   ui.onlineStatus(connected&&vote ? (vote.ready?t.waitingForSleep(vote.ready,vote.total):t.onlineCount(vote.total)) : '');
 }
+function applyAudioOptions() {
+  setVolume(options.soundEnabled?options.volume:0);
+  music.configure(options.musicEnabled,options.musicVolume);
+}
+function updateTrackLabel() {
+  const label=app.querySelector<HTMLElement>('#music-track');
+  if(!label)return;
+  label.hidden=playingTheme===null;
+  if(playingTheme)label.textContent=locale.text.nowPlaying(playingTheme==='day'?locale.text.dayTrack:locale.text.nightTrack);
+}
 function updateUI(refreshWorld = false) {
+  music.setTheme(musicTheme(model.farm.minutes));
   ui.setTouch(touchMedia.matches,started);
   ui.hud(model.farm);
   ui.journal(model.farm);
@@ -90,6 +136,7 @@ function show(next: Panel|null) {
     selected,outfit,line,trade,summary,started,tutorialPage,touch:touchMedia.matches,online,
     join:joinDraft,joining,connectionNote:connectionNote?locale.text[connectionNote]:'',vote,
   }):'');
+  if(next==='settings')updateTrackLabel();
   if(next)ui.context('');
 }
 function close() {
@@ -205,6 +252,7 @@ function tick(delta: number) {
   if(hudElapsed>=130) {
     hudElapsed=0;
     ui.hud(model.farm);
+    music.setTheme(musicTheme(model.farm.minutes));
     const nearby=model.interact().panel;
     const t=locale.text, touch=touchMedia.matches;
     const hint=model.cast?(now>=model.cast.until?(touch?t.touchBite:t.fishBite):t.fishing)
@@ -252,6 +300,7 @@ function receive(message: ServerPacket) {
       if(!connected)return;
       correctPosition(message.position);
       model.farm.minutes=message.minutes;
+      music.setTheme(musicTheme(message.minutes));
       peers=message.peers;
       const changed=vote?.ready!==message.vote.ready || vote?.total!==message.vote.total || vote?.mine!==message.vote.mine;
       vote=message.vote;
@@ -377,6 +426,7 @@ function action(value: string) {
 }
 
 app.addEventListener('click', event=>{
+  if(event.isTrusted)music.unlock();
   const button=(event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
   if(button&&!button.disabled)action(button.dataset.action!);
 });
@@ -404,10 +454,21 @@ app.addEventListener('submit',event=>{
 });
 app.addEventListener('input', event=>{
   const input=event.target as HTMLInputElement;
-  if(input.id==='volume'){
-    options.volume=Number(input.value)/100;
-    setVolume(options.volume);
-    document.querySelector('#volume-label')!.textContent=`${input.value}%`;
+  if(input.id==='sound-volume'||input.id==='music-volume'){
+    const value=Number(input.value)/100;
+    if(input.id==='sound-volume')options.volume=value;
+    else options.musicVolume=value;
+    document.getElementById(input.id+'-label')!.textContent=`${input.value}%`;
+    applyAudioOptions();
+    if(input.id==='music-volume' && event.isTrusted)music.unlock();
+  }else if(input.id==='sound-enabled'||input.id==='music-enabled'){
+    const channel=input.id==='sound-enabled'?'sound':'music';
+    if(channel==='sound')options.soundEnabled=input.checked;
+    else options.musicEnabled=input.checked;
+    app.querySelector<HTMLInputElement>('#'+channel+'-volume')!.disabled=!input.checked;
+    applyAudioOptions();
+    if(channel==='sound'&&input.checked)play('uiSelect');
+    if(channel==='music'&&input.checked&&event.isTrusted)music.unlock();
   }else if(input.id==='motion'){
     options.reducedMotion=input.checked;
     document.documentElement.classList.toggle('reduce-motion',options.reducedMotion);
@@ -416,7 +477,7 @@ app.addEventListener('input', event=>{
 });
 app.addEventListener('change', event=>{
   const input=event.target;
-  if(input instanceof HTMLInputElement && input.id==='volume'){play('uiSelect');return;}
+  if(input instanceof HTMLInputElement && input.id==='sound-volume'){play('uiSelect');return;}
   if(!(input instanceof HTMLSelectElement) || input.id!=='language' || panel!=='settings'
     || !isLanguage(input.value) || input.value===options.language)return;
   options.language=input.value;
@@ -434,9 +495,14 @@ touchMedia.addEventListener('change',()=>{
   updateUI();
   if(panel==='tutorial')show(panel);
 });
+orientation.addEventListener('change',()=>{
+  pad.reset();
+  network.move(0,0);
+});
 const bindings: Record<string,Panel>={i:'inventory',c:'craft',j:'quests',k:'calendar'};
 window.addEventListener('keydown',event=>{
   if(!loaded)return;
+  if(event.isTrusted)music.unlock();
   const target=event.target as HTMLElement;
   if(event.key==='Escape'){
     event.preventDefault();

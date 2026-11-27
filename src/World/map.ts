@@ -8,7 +8,8 @@ export const PLOT = { x: 11, y: 13, w: 10, h: 6 };
 export const SHOP = { x: 26, y: 9 };
 export const NPC_SPOT = { x: 24, y: 11 };
 export const inPlot = (x: number, y: number) => x >= PLOT.x && y >= PLOT.y && x < PLOT.x + PLOT.w && y < PLOT.y + PLOT.h;
-export const water = (x: number, y: number) => ((x - 29.4) / 5.2) ** 2 + ((y - 17.2) / 3.35) ** 2 < 1;
+export const POND = { x: 29.4, y: 17.2, radiusX: 5.2, radiusY: 3.35 };
+export const water = (x: number, y: number) => ((x - POND.x) / POND.radiusX) ** 2 + ((y - POND.y) / POND.radiusY) ** 2 < 1;
 export const path = (x: number, y: number) =>
   (y >= 10 && y <= 11 && x >= 3 && x <= 38)
   || (x >= 9 && x <= 10 && y >= 8 && y <= 22)

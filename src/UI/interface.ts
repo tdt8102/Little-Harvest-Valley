@@ -38,6 +38,15 @@ const toolTip = (id: ItemId, locale: Locale) => {
 const shortcut = (id: Panel, copy: keyof Locale['text'], image: string, key: string) =>
   `<button type="button" data-action="panel:${id}" class="nav-item" data-label="${copy}">${icon(image)}<span data-copy="${copy}"></span><kbd>${key}</kbd></button>`;
 
+function audioSetting(id: string, toggleLabel: string, volumeLabel: string, enabled: boolean, volume: number) {
+  const percent=Math.round(volume*100);
+  return `<div class="audio-setting">
+    <label class="toggle"><input type="checkbox" id="${id}-enabled" ${enabled?'checked':''}> ${toggleLabel}</label>
+    <label for="${id}-volume" class="volume-label">${volumeLabel}<output id="${id}-volume-label" aria-hidden="true">${percent}%</output></label>
+    <input type="range" id="${id}-volume" min="0" max="100" value="${percent}" ${enabled?'':'disabled'}>
+  </div>`;
+}
+
 export class Interface {
   private readonly mount: HTMLElement;
   private toastTimer = 0;
@@ -245,7 +254,18 @@ export function panelBody(panel: Panel, farm: Farm, options: Options, locale: Lo
       return `<div class="calendar-label"><h3>${current.season}</h3><span>${t.year(current.year)}</span></div><div class="calendar-grid">${t.weekdays.map(day=>`<small>${day}</small>`).join('')}${Array.from({length:28},(_,i)=>`<div ${i+1===current.number?'class="today" aria-current="date"':''}>${i+1}</div>`).join('')}</div>`;
     }
     case 'pause': return `<div class="menu-list">${button(state.started?t.resume:t.returnToMenu,'close','primary')}${state.started&&!state.online?button(t.saveGame,'save'):''}${button(t.tutorial,'panel:tutorial')}${button(t.settings,'panel:settings')}${state.started?button(state.online?t.leaveRoom:t.saveAndReturn,'title'):''}</div>`;
-    case 'settings': return `<div class="settings"><label for="language">${t.language}</label><select id="language"><option value="vi" lang="vi" ${options.language==='vi'?'selected':''}>Tiếng Việt</option><option value="en" lang="en" ${options.language==='en'?'selected':''}>English</option></select><label>${t.soundVolume} <output id="volume-label">${Math.round(options.volume*100)}%</output><input aria-label="${t.soundVolume}" type="range" id="volume" min="0" max="100" value="${Math.round(options.volume*100)}"></label><label class="toggle"><input type="checkbox" id="motion" ${options.reducedMotion?'checked':''}> ${t.reduceMotion}</label></div><div class="actions">${button(t.done,'close','primary')}</div>`;
+    case 'settings': return `<div class="settings">
+      <div class="settings-language">
+        <label for="language">${t.language}</label>
+        <select id="language"><option value="vi" lang="vi" ${options.language==='vi'?'selected':''}>Tiếng Việt</option><option value="en" lang="en" ${options.language==='en'?'selected':''}>English</option></select>
+      </div>
+      <div class="audio-settings">
+        ${audioSetting('music',t.music,t.musicVolume,options.musicEnabled,options.musicVolume)}
+        ${audioSetting('sound',t.soundEffects,t.soundVolume,options.soundEnabled,options.volume)}
+      </div>
+      <p id="music-track" class="music-track" role="status" hidden></p>
+      <label class="toggle"><input type="checkbox" id="motion" ${options.reducedMotion?'checked':''}> ${t.reduceMotion}</label>
+    </div><div class="actions">${button(t.done,'close','primary')}</div>`;
     case 'shop': {
       const buying=state.trade==='buy', items=Object.entries(buying?PRICES:SALES) as [ItemId,number][];
       return `<div class="shop-tabs">${button(t.buy,'trade-tab:buy',buying?'primary':'')}${button(t.sell,'trade-tab:sell',buying?'':'primary')}${gold(farm.coins,locale)}</div><div class="item-list">${items.map(([id,rate])=>`<article class="item-row">${itemMark(id)}<div><h3>${locale.item(id).name}</h3><p>${t.price(rate,farm.bag[id]??0)}</p></div>${button(buying?t.buyOne:t.sellOne,`trade:${id}`,'primary',buying?farm.coins<rate:!has(farm.bag,id))}</article>`).join('')}</div>`;

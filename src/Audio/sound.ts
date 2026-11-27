@@ -59,6 +59,11 @@ function makeGraph(): AudioGraph {
   return { context, master, noise };
 }
 
+export function audioContext() {
+  graph ??= makeGraph();
+  return graph.context;
+}
+
 function envelope(audio: AudioGraph, start: number, duration: number, level: number) {
   const gain = audio.context.createGain();
   gain.gain.setValueAtTime(.0001, start);

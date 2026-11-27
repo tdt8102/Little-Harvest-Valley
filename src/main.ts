@@ -1,24 +1,26 @@
 import Phaser from 'phaser';
 import { play } from './Audio/sound.ts';
 import type { Point } from './Components/position.ts';
+import { isLanguage } from './Config/language.ts';
 import { DEFAULT_CHARACTER, newFarm } from './Core/state.ts';
 import type { Totals } from './Core/state.ts';
 import { BAR, has } from './Inventory/bag.ts';
-import { ITEMS } from './Items/catalog.ts';
 import type { ItemId } from './Items/catalog.ts';
 import { MIRA } from './NPC/mira.ts';
 import { readFarm, readOptions, storeFarm, storeOptions } from './Save/storage.ts';
 import { ValleyScene } from './Scenes/ValleyScene.ts';
 import { Gameplay } from './Systems/gameplay.ts';
 import type { Result } from './Systems/gameplay.ts';
-import { date } from './Systems/clock.ts';
 import { Interface, panelBody, portrait } from './UI/interface.ts';
 import type { Panel } from './UI/interface.ts';
+import { createLocale } from './UI/locale.ts';
 import './style.css';
 
 const app=document.querySelector<HTMLElement>('#app')!;
-const ui=new Interface(app);
-let save=readFarm(), model=new Gameplay(newFarm(DEFAULT_CHARACTER)), options=readOptions();
+const options=readOptions();
+let locale=createLocale(options.language);
+const ui=new Interface(app,locale);
+let save=readFarm(), model=new Gameplay(newFarm(DEFAULT_CHARACTER));
 let panel: Panel|null=null, started=false, loaded=false;
 let selected=0, slots=[...BAR], outfit=0, line=0, trade:'buy'|'sell'='buy';
 let summary: Totals|null=null, hudElapsed=0, saveElapsed=0;
@@ -30,7 +32,8 @@ const scene=new ValleyScene({
   reduced:()=>options.reducedMotion, use:useTool, tick,
   inspect:()=>!started,
   ready:()=>{loaded=true;ui.ready();ui.main(true,!!save);},
-  hint:message=>ui.toast(message),
+  reeledIn:()=>ui.toast(locale.text.reeledIn),
+  landmarks:()=>[locale.text.cottage,locale.text.market,locale.text.pond],
 });
 new Phaser.Game({
   type: Phaser.AUTO, parent:'world', scene:[scene],
@@ -54,7 +57,7 @@ function saveNow() {
 }
 function show(next: Panel|null) {
   panel=next;
-  ui.modal(next,next?panelBody(next,model.farm,options,{selected,outfit,line,trade,summary,started}):'');
+  ui.modal(next,next?panelBody(next,model.farm,options,locale,{selected,outfit,line,trade,summary,started}):'');
   if(next)ui.context('');
 }
 function close() {
@@ -71,10 +74,10 @@ function begin(farm: ReturnType<typeof newFarm>) {
   ui.main(false,false);
   show(null);
   updateUI(true);
-  if(!saveNow())ui.toast('Browser storage is unavailable. Progress cannot be saved.');
+  if(!saveNow())ui.toast(locale.text.storageProgress);
 }
 function handle(result: Result,target?: Point) {
-  if(result.message)ui.toast(result.message);
+  if(result.notice)ui.toast(locale.notice(result.notice));
   if(result.sound){play(result.sound,options.volume);if(target)scene.flash(target,result.sound==='water'?0x91c1c8:0xf4d58a);}
   if(result.changed){
     updateUI(true);
@@ -96,11 +99,12 @@ function tick(delta: number) {
     const cast=model.cast, now=performance.now();
     if(cast && now>cast.expires){
       model.cast=null;
-      ui.toast('The fish slipped away. Try another cast.');
+      ui.toast(locale.notice('fishEscaped'));
     }
     const nearby=model.interact().panel;
-    const hint=cast?(now>=cast.until?'Bite! Click or press Space to reel in.':'Fishing… wait for a bite.')
-      : nearby==='sleep'?'E  ·  Rest at the cottage':nearby==='shop'?'E  ·  Open market':nearby==='dialogue'?'E  ·  Talk to Mira':'';
+    const t=locale.text;
+    const hint=cast?(now>=cast.until?t.fishBite:t.fishing)
+      : nearby==='sleep'?t.interactCottage:nearby==='shop'?t.interactMarket:nearby==='dialogue'?t.interactMira:'';
     ui.context(hint);
   }
   if(saveElapsed>=9500){saveElapsed=0;saveNow();}
@@ -129,7 +133,7 @@ function action(value: string) {
     case 'equip': {
       const id=arg as ItemId;
       if(started&&has(model.farm.bag,id)){slots[selected]=id;select(selected);saveNow();close();}
-      else ui.toast('Start a farm to equip items.');
+      else ui.toast(locale.text.startToEquip);
       break;
     }
     case 'outfit': {
@@ -152,9 +156,9 @@ function action(value: string) {
       show('summary');
       break;
     }
-    case 'save': ui.toast(saveNow()?'Farm saved.':'Browser storage is unavailable.');break;
+    case 'save': ui.toast(saveNow()?locale.text.farmSaved:locale.text.storageUnavailable);break;
     case 'title': {
-      if(!saveNow()){ui.toast('Browser storage is unavailable.');break;}
+      if(!saveNow()){ui.toast(locale.text.storageUnavailable);break;}
       started=false;model=new Gameplay(newFarm(DEFAULT_CHARACTER));slots=[...BAR];selected=0;
       show(null);ui.main(true,!!save);updateUI(true);break;
     }
@@ -169,7 +173,7 @@ app.addEventListener('submit',event=>{
   if(form.id!=='character-form')return;
   event.preventDefault();
   const data=new FormData(form), name=String(data.get('name')).trim(), farm=String(data.get('farm')).trim();
-  if(!name||!farm){ui.toast('Enter a name for your farmer and farm.');return;}
+  if(!name||!farm){ui.toast(locale.text.enterNames);return;}
   begin(newFarm({name,farm,outfit}));
 });
 app.addEventListener('input', event=>{
@@ -182,6 +186,20 @@ app.addEventListener('input', event=>{
     document.documentElement.classList.toggle('reduce-motion',options.reducedMotion);
   }else return;
   storeOptions(options);
+});
+app.addEventListener('change', event=>{
+  const input=event.target;
+  if(!(input instanceof HTMLSelectElement) || input.id!=='language' || panel!=='settings'
+    || !isLanguage(input.value) || input.value===options.language)return;
+  options.language=input.value;
+  storeOptions(options);
+  locale=createLocale(options.language);
+  ui.setLocale(locale);
+  ui.main(!started,!!save);
+  updateUI();
+  scene.updateLandmarkLabels();
+  show('settings');
+  app.querySelector<HTMLSelectElement>('#language')?.focus();
 });
 const bindings: Record<string,Panel>={i:'inventory',c:'craft',j:'quests',k:'calendar'};
 window.addEventListener('keydown',event=>{

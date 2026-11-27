@@ -5,3 +5,4 @@ export const QUESTS = [
   { id: 'pond', title: 'A Quiet Morning', detail: 'Catch 2 pond perch at Willow Pond.', item: 'fish', target: 2, reward: 90 },
   { id: 'fence', title: 'Good Fences', detail: 'Craft 2 fence kits for your farm.', item: 'fence', target: 2, reward: 65 },
 ] as const satisfies readonly { id: string; title: string; detail: string; item: ItemId; target: number; reward: number }[];
+export type QuestId = typeof QUESTS[number]['id'];

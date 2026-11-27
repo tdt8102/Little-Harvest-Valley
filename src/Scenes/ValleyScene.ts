@@ -10,8 +10,9 @@ import { fence, hash, inPlot, NPC_SPOT, path, PLOT, water } from '../World/map.t
 
 type Ports = {
   model: () => Gameplay; blocked: () => boolean; reduced: () => boolean;
-  use: (target: Point) => void; tick: (delta: number) => void; ready: () => void; hint: (message: string) => void;
+  use: (target: Point) => void; tick: (delta: number) => void; ready: () => void; reeledIn: () => void;
   inspect: () => boolean;
+  landmarks: () => [cottage: string, market: string, pond: string];
 };
 const center = (value: number) => value * TILE + TILE / 2;
 const directions: Direction[] = ['down','up','left','right'];
@@ -23,6 +24,7 @@ export class ValleyScene extends Phaser.Scene {
   private ripples!: Phaser.GameObjects.Graphics;
   private effects!: Phaser.GameObjects.Graphics;
   private lampGlows: Phaser.GameObjects.Image[] = [];
+  private landmarkSigns: Phaser.GameObjects.Text[] = [];
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private facing: Direction = 'down';
   private action: { x: number; y: number; until: number; color: number } | null = null;
@@ -135,10 +137,15 @@ export class ValleyScene extends Phaser.Scene {
     this.add.image(center(12),center(8)+20,'cottage').setOrigin(.5,.94).setScale(1.09).setDepth(center(8)+18);
     this.add.image(center(26),center(8)+20,'market').setOrigin(.5,.94).setScale(1.09).setDepth(center(8)+18);
     this.add.image(center(NPC_SPOT.x),center(NPC_SPOT.y)+7,'person-3-down-0').setOrigin(.5,.86).setDepth(center(NPC_SPOT.y)+8);
-    const signStyle={fontFamily:'monospace',fontSize:'9px',fontStyle:'bold',color:'#fff0c4',backgroundColor:'#30281dd9',padding:{x:7,y:4}};
-    this.add.text(center(12),center(5)-24,'FARM COTTAGE',signStyle).setOrigin(.5).setDepth(700).setResolution(2);
-    this.add.text(center(26),center(5)-24,'MIRA’S MARKET',signStyle).setOrigin(.5).setDepth(700).setResolution(2);
-    this.add.text(center(29.4),center(17.2)+14,'WILLOW POND',signStyle).setOrigin(.5).setDepth(700).setResolution(2).setAlpha(.86);
+    const signStyle={fontFamily:'Consolas, monospace',fontSize:'10px',fontStyle:'bold',color:'#fff0c4',backgroundColor:'#30281dd9',padding:{x:7,y:5}};
+    const positions=[[center(12),center(5)-24],[center(26),center(5)-24],[center(29.4),center(17.2)+14]];
+    this.landmarkSigns=positions.map(([x,y])=>this.add.text(x,y,'',signStyle).setOrigin(.5).setDepth(700).setResolution(2));
+    this.landmarkSigns[2].setAlpha(.86);
+    this.updateLandmarkLabels();
+  }
+  updateLandmarkLabels() {
+    const labels=this.ports.landmarks();
+    this.landmarkSigns.forEach((sign,index)=>sign.setText(labels[index].toUpperCase()));
   }
   renderChanges() {
     if (!this.player) return;
@@ -181,7 +188,7 @@ export class ValleyScene extends Phaser.Scene {
     if(x||y){
       this.facing=y>0?'down':y<0?'up':x>0?'right':'left';
       const run=delta*.0044/(x&&y?Math.SQRT2:1);
-      if(model.move(x*run,y*run))this.ports.hint('Line reeled in.');
+      if(model.move(x*run,y*run))this.ports.reeledIn();
     }
     if(!frozen){model.farm.minutes=advance(model.farm.minutes,delta);this.ports.tick(delta);}
     this.placePlayer(x,y,time);

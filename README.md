@@ -11,7 +11,9 @@ pnpm install
 pnpm dev
 ```
 
-Mở địa chỉ được Vite in ra, mặc định là http://127.0.0.1:5173. Chọn **New Game**, nhập tên nhân vật và nông trại rồi chọn **Begin Spring**. Nút **Continue** xuất hiện khi trình duyệt có bản lưu.
+Mở địa chỉ được Vite in ra, mặc định là http://127.0.0.1:5173. Chọn **Chơi mới**, nhập tên nhân vật và nông trại rồi chọn **Bắt đầu mùa xuân**. Nút **Tiếp tục** xuất hiện khi trình duyệt có bản lưu.
+
+Game mặc định dùng tiếng Việt. Bạn có thể đổi sang **English** trong **Cài đặt → Ngôn ngữ** ở menu chính hoặc menu tạm dừng. Trình duyệt lưu lựa chọn ngôn ngữ riêng với tiến trình nông trại.
 
 ```sh
 pnpm test
@@ -38,9 +40,9 @@ Bản production nằm trong `dist/` và có thể phục vụ bằng máy chủ
 | I / C / J / K | Túi đồ / chế tạo / nhiệm vụ / lịch |
 | Esc | Đóng bảng hoặc tạm dừng |
 
-Luống đất nằm phía nam nhà. Dùng cuốc (1), gieo củ cải (6) rồi tưới (2). Sau mỗi ngày, trở về cửa nhà và nhấn E để ngủ. Củ cải cần hai đêm được tưới. Chạm vào cây trưởng thành hoặc dùng Space khi đứng trước cây để thu hoạch. Quầy của Mira ở phía đông. Đứng trước cửa quầy, nhấn E, rồi dùng hai thẻ **Buy** và **Sell**.
+Luống đất nằm phía nam nhà. Dùng cuốc (1), gieo củ cải (6) rồi tưới (2). Sau mỗi ngày, trở về cửa nhà và nhấn E để ngủ. Củ cải cần hai đêm được tưới. Nhấp vào cây trưởng thành hoặc dùng phím cách khi đứng trước cây để thu hoạch. Cửa hàng Mira ở phía đông. Đứng trước cửa hàng, nhấn E, rồi dùng hai thẻ **Mua** và **Bán**.
 
-Dùng rìu (3) với cây hoặc gốc cây và cuốc chim (4) với đá. Dùng cần (5) từ bờ hồ, nhắm vào mặt nước và kéo cần khi thông báo cá cắn xuất hiện. Dùng bình tưới tại bờ hồ để lấy nước. Chọn vật phẩm trong **Inventory** để gán vào ô công cụ đang chọn. Hoàn thành mục tiêu và nhận thưởng trong **Quest Journal**.
+Dùng rìu (3) với cây hoặc gốc cây và cuốc chim (4) với đá. Dùng cần (5) từ bờ hồ, nhắm vào mặt nước và kéo cần khi thông báo cá cắn xuất hiện. Dùng bình tưới tại bờ hồ để lấy nước. Chọn vật phẩm trong **Túi đồ** để gán vào ô công cụ đang chọn. Hoàn thành mục tiêu và nhận thưởng trong **Nhật ký nhiệm vụ**.
 
 Game tự lưu sau các hành động thay đổi tiến trình, khi ngủ, định kỳ trong lúc chơi và khi trang bị ẩn. Có thể lưu thủ công từ menu tạm dừng.
 

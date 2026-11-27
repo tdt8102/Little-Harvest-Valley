@@ -1,3 +1,5 @@
+import { DEFAULT_LANGUAGE, isLanguage } from '../Config/language.ts';
+import type { Language } from '../Config/language.ts';
 import { newFarm } from '../Core/state.ts';
 import type { Farm } from '../Core/state.ts';
 import { BAR } from '../Inventory/bag.ts';
@@ -5,7 +7,8 @@ import { ITEMS } from '../Items/catalog.ts';
 
 const SAVE = 'little-harvest-valley:v1';
 const OPTIONS = 'little-harvest-valley:settings';
-export type Options = { volume: number; reducedMotion: boolean };
+export type Options = { volume: number; reducedMotion: boolean; language: Language };
+const DEFAULT_OPTIONS: Options = { volume: 0.5, reducedMotion: false, language: DEFAULT_LANGUAGE };
 export function storeFarm(farm: Farm) {
   try { localStorage.setItem(SAVE, JSON.stringify(farm)); return true; }
   catch { return false; }
@@ -25,8 +28,12 @@ export function readFarm(): Farm | null {
 export function readOptions(): Options {
   try {
     const value = JSON.parse(localStorage.getItem(OPTIONS) ?? '{}') as Partial<Options> | null;
-    return { volume: typeof value?.volume === 'number' ? Math.max(0, Math.min(1, value.volume)) : 0.5, reducedMotion: value?.reducedMotion === true };
-  } catch { return { volume: 0.5, reducedMotion: false }; }
+    return {
+      volume: typeof value?.volume === 'number' ? Math.max(0, Math.min(1, value.volume)) : DEFAULT_OPTIONS.volume,
+      reducedMotion: value?.reducedMotion === true,
+      language: isLanguage(value?.language) ? value.language : DEFAULT_OPTIONS.language,
+    };
+  } catch { return { ...DEFAULT_OPTIONS }; }
 }
 export function storeOptions(options: Options) {
   try { localStorage.setItem(OPTIONS, JSON.stringify(options)); } catch { /* Private browsing can disable storage. */ }

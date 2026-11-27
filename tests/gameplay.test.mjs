@@ -4,7 +4,8 @@ import { DEFAULT_CHARACTER, newFarm } from '../src/Core/state.ts';
 import { HOME } from '../src/Config/game.ts';
 import { Gameplay } from '../src/Systems/gameplay.ts';
 import { water, SHOP, NPC_SPOT } from '../src/World/map.ts';
-import { readFarm, storeFarm } from '../src/Save/storage.ts';
+import { readFarm, readOptions, storeFarm, storeOptions } from '../src/Save/storage.ts';
+import { createLocale } from '../src/UI/locale.ts';
 
 const fresh = () => new Gameplay(newFarm(DEFAULT_CHARACTER));
 const use = (game, item, x, y, at = 0) => game.dispatch({ type:'use', item, target:{x,y}, at });
@@ -99,7 +100,7 @@ test('fishing requires a bank, bite timing and an active cast', () => {
   assert.equal(use(game,'rod',25,17,1500).changed,true);
   assert.equal(game.farm.bag.fish,1);
   use(game,'rod',25,17,1700);
-  assert.match(use(game,'rod',25,17,6000).message,/slipped/);
+  assert.equal(use(game,'rod',25,17,6000).notice,'fishEscaped');
   assert.equal(game.farm.bag.fish,1);
   moveTo(game,NPC_SPOT.x,NPC_SPOT.y);
   assert.equal(game.interact().panel,'dialogue');
@@ -116,4 +117,30 @@ test('local storage round-trips progress and rejects corrupt data', () => {
   assert.deepEqual(readFarm(),game.farm);
   backing.set('little-harvest-valley:v1','invalid');
   assert.equal(readFarm(),null);
+});
+
+test('language options migrate older settings and persist an explicit choice', () => {
+  const settingsKey = 'little-harvest-valley:settings';
+  const backing = new Map([[settingsKey,JSON.stringify({volume:0.3,reducedMotion:true})]]);
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{
+    getItem:key=>backing.get(key)??null,setItem:(key,value)=>backing.set(key,value),
+  }});
+  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'vi'});
+  storeOptions({...readOptions(),language:'en'});
+  assert.deepEqual(readOptions(),{volume:0.3,reducedMotion:true,language:'en'});
+  backing.set(settingsKey,JSON.stringify({language:'fr'}));
+  assert.equal(readOptions().language,'vi');
+});
+
+test('the same gameplay result can be shown in Vietnamese or English', () => {
+  const game = fresh();
+  const vi = createLocale('vi'), en = createLocale('en');
+  const result = game.dispatch({type:'trade',mode:'buy',item:'turnipSeed'});
+  assert.equal(vi.notice(result.notice),'Đã mua · Hạt củ cải');
+  assert.equal(en.notice(result.notice),'Purchased · Turnip Seeds');
+  assert.equal(vi.notice({kind:'claimed',quest:'first',reward:120}),'Vụ mùa đầu tiên · +120 G');
+  assert.equal(vi.day(29).label,'Hạ 1');
+  assert.equal(en.day(29).label,'Summer 1');
+  assert.equal(vi.time(13 * 60 + 5),'13:05');
+  assert.equal(en.time(13 * 60 + 5),'1:05 PM');
 });

@@ -1,6 +1,6 @@
 import { DAY_END, DAY_START, SEASON_DAYS } from '../Config/game.ts';
 
-export const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
+export const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'] as const;
 export function date(day: number) {
   return { number: (day - 1) % SEASON_DAYS + 1, season: SEASONS[Math.floor((day - 1) / SEASON_DAYS) % 4], year: Math.floor((day - 1) / 112) + 1 };
 }
